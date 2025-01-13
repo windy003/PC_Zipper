@@ -1,12 +1,20 @@
 import os
 import sys
+import winreg
 import zipfile
+import logging
 from pathlib import Path
+from datetime import datetime
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QVBoxLayout, 
                             QWidget, QFileDialog, QProgressBar, QTextEdit, 
                             QLabel, QHBoxLayout, QListView, QTreeView, QSplitter)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QAbstractListModel, QModelIndex, QTimer
 from PyQt6.QtGui import QStandardItemModel, QStandardItem, QIcon
+
+# 设置日志
+log_file = os.path.join(os.path.dirname(__file__), 'zipper.log')
+logging.basicConfig(filename=log_file, level=logging.DEBUG,
+                   format='%(asctime)s - %(levelname)s - %(message)s')
 
 def get_resource_path(relative_path):
     """获取资源文件的绝对路径"""
@@ -15,6 +23,100 @@ def get_resource_path(relative_path):
     except Exception:
         base_path = os.path.abspath(os.path.dirname(__file__))
     return os.path.join(base_path, relative_path)
+
+def get_script_cmd():
+    """获取脚本或exe的完整路径"""
+    try:
+        if getattr(sys, 'frozen', False):
+            cmd = f'"{sys.executable}"'
+        else:
+            python_path = sys.executable
+            script_path = os.path.abspath(__file__)
+            cmd = f'"{python_path}" "{script_path}"'
+        logging.info(f"Command: {cmd}")  # 记录命令
+        return cmd
+    except Exception as e:
+        logging.error(f"Error in get_script_cmd: {e}")
+        return None
+
+def add_context_menu():
+    """添加右键菜单"""
+    try:
+        # 获取命令路径
+        base_cmd = get_script_cmd()
+        logging.info(f"Base command: {base_cmd}")
+        
+        # 使用完整的命令路径
+        folder_cmd = f'cmd /c start "" /B {base_cmd} compress "%1"'
+        zip_cmd = f'cmd /c start "" /B {base_cmd} extract "%1"'
+        preview_cmd = f'cmd /c start "" /B {base_cmd} preview "%1"'
+        
+        logging.info(f"Folder command: {folder_cmd}")
+        logging.info(f"Zip command: {zip_cmd}")
+        logging.info(f"Preview command: {preview_cmd}")
+        
+        try:
+            key = winreg.CreateKey(winreg.HKEY_CLASSES_ROOT, 
+                                 "Directory\\shell\\AddToZip")
+            winreg.SetValue(key, '', winreg.REG_SZ, "添加到ZIP(&Z)")
+            command_key = winreg.CreateKey(key, "command")
+            winreg.SetValue(command_key, '', winreg.REG_SZ, folder_cmd)
+        except Exception as e:
+            logging.error(f"添加文件夹菜单失败: {e}")
+
+        try:
+            # 添加解压菜单
+            key = winreg.CreateKey(winreg.HKEY_CLASSES_ROOT, 
+                                 ".zip\\shell\\ExtractHere")
+            winreg.SetValue(key, '', winreg.REG_SZ, "解压到同名文件夹(&X)")
+            command_key = winreg.CreateKey(key, "command")
+            winreg.SetValue(command_key, '', winreg.REG_SZ, zip_cmd)
+            
+            # 添加预览菜单
+            key = winreg.CreateKey(winreg.HKEY_CLASSES_ROOT, 
+                                 ".zip\\shell\\Preview")
+            winreg.SetValue(key, '', winreg.REG_SZ, "预览(&P)")
+            command_key = winreg.CreateKey(key, "command")
+            winreg.SetValue(command_key, '', winreg.REG_SZ, preview_cmd)
+        except Exception as e:
+            logging.error(f"添加ZIP文件菜单失败: {e}")
+            
+        logging.info("右键菜单添加成功！")
+        return True
+    except Exception as e:
+        logging.error(f"添加右键菜单失败: {e}")
+        return False
+
+def remove_context_menu():
+    """移除右键菜单"""
+    try:
+        # 移除文件夹菜单
+        try:
+            winreg.DeleteKey(winreg.HKEY_CLASSES_ROOT, 
+                           "Directory\\shell\\AddToZip\\command")
+            winreg.DeleteKey(winreg.HKEY_CLASSES_ROOT, 
+                           "Directory\\shell\\AddToZip")
+        except:
+            pass
+            
+        # 移除ZIP文件菜单
+        try:
+            winreg.DeleteKey(winreg.HKEY_CLASSES_ROOT, 
+                           ".zip\\shell\\ExtractHere\\command")
+            winreg.DeleteKey(winreg.HKEY_CLASSES_ROOT, 
+                           ".zip\\shell\\ExtractHere")
+            winreg.DeleteKey(winreg.HKEY_CLASSES_ROOT, 
+                           ".zip\\shell\\Preview\\command")
+            winreg.DeleteKey(winreg.HKEY_CLASSES_ROOT, 
+                           ".zip\\shell\\Preview")
+        except:
+            pass
+            
+        print("右键菜单移除成功！")
+        return True
+    except Exception as e:
+        print(f"移除右键菜单失败: {e}")
+        return False
 
 class ZipWorker(QThread):
     progress = pyqtSignal(int)
@@ -267,12 +369,19 @@ class MainWindow(QMainWindow):
         if folder_path:
             self.start_worker('compress', folder_path)
 
-    def extract_zip(self):
-        zip_path, _ = QFileDialog.getOpenFileName(self, "选择ZIP文件", "", "ZIP文件 (*.zip)")
+    def extract_zip(self, zip_path=None):
+        """解压ZIP文件，支持直接传入路径或通过对话框选择"""
+        if not zip_path:
+            zip_path, _ = QFileDialog.getOpenFileName(self, "选择ZIP文件", "", "ZIP文件 (*.zip)")
+        
         if zip_path:
-            extract_path = QFileDialog.getExistingDirectory(self, "选择解压目标文件夹")
-            if extract_path:
-                self.start_worker('extract', zip_path, extract_path)
+            # 创建同名文件夹作为解压目标
+            zip_path = Path(zip_path)
+            extract_path = zip_path.with_suffix('')  # 移除.zip后缀
+            
+            # 开始解压
+            self.start_worker('extract', str(zip_path), str(extract_path))
+            self.statusBar().showMessage(f"正在解压到: {extract_path}")
 
     def preview_zip(self):
         zip_path, _ = QFileDialog.getOpenFileName(self, "选择ZIP文件", "", "ZIP文件 (*.zip)")
@@ -314,12 +423,40 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"错误: {error_msg}")
 
 if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    
-    # 设置应用程序图标
-    icon_path = get_resource_path("icon.ico")
-    app.setWindowIcon(QIcon(icon_path))
-    
-    window = MainWindow()
-    window.showMaximized()
-    sys.exit(app.exec()) 
+    try:
+        logging.info(f"Program started with arguments: {sys.argv}")
+        
+        if len(sys.argv) == 1:
+            # 无参数启动，显示主窗口
+            app = QApplication(sys.argv)
+            icon_path = get_resource_path("icon.ico")
+            app.setWindowIcon(QIcon(icon_path))
+            
+            # 先移除旧的右键菜单，然后添加新的
+            logging.info("正在清理旧的右键菜单...")
+            remove_context_menu()
+            logging.info("正在添加新的右键菜单...")
+            add_context_menu()
+            
+            window = MainWindow()
+            window.showMaximized()
+            sys.exit(app.exec())
+        elif len(sys.argv) == 3:
+            # 从右键菜单启动
+            command, path = sys.argv[1:3]
+            logging.info(f"Command: {command}, Path: {path}")
+            
+            app = QApplication(sys.argv)
+            window = MainWindow()
+            window.showMaximized()  # 确保窗口显示
+            
+            if command == 'compress':
+                window.compress_folder(path)
+            elif command == 'extract':
+                window.extract_zip(path)
+            elif command == 'preview':
+                window.preview_zip(path)
+            
+            sys.exit(app.exec())
+    except Exception as e:
+        logging.error(f"Program error: {e}", exc_info=True) 

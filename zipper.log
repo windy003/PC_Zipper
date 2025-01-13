@@ -1,0 +1,9 @@
+2025-01-13 08:03:51,278 - INFO - Program started with arguments: ['.\\1.py']
+2025-01-13 08:03:51,310 - INFO - 正在清理旧的右键菜单...
+2025-01-13 08:03:51,311 - INFO - 正在添加新的右键菜单...
+2025-01-13 08:03:51,311 - INFO - Command: "C:\Users\windy\.pyenv\pyenv-win\versions\3.9.13\python.exe" "D:\files\projects\PC_Zipper\1.py"
+2025-01-13 08:03:51,311 - INFO - Base command: "C:\Users\windy\.pyenv\pyenv-win\versions\3.9.13\python.exe" "D:\files\projects\PC_Zipper\1.py"
+2025-01-13 08:03:51,311 - INFO - Folder command: cmd /c start "" /B "C:\Users\windy\.pyenv\pyenv-win\versions\3.9.13\python.exe" "D:\files\projects\PC_Zipper\1.py" compress "%1"
+2025-01-13 08:03:51,311 - INFO - Zip command: cmd /c start "" /B "C:\Users\windy\.pyenv\pyenv-win\versions\3.9.13\python.exe" "D:\files\projects\PC_Zipper\1.py" extract "%1"
+2025-01-13 08:03:51,311 - INFO - Preview command: cmd /c start "" /B "C:\Users\windy\.pyenv\pyenv-win\versions\3.9.13\python.exe" "D:\files\projects\PC_Zipper\1.py" preview "%1"
+2025-01-13 08:03:51,312 - INFO - 右键菜单添加成功！
